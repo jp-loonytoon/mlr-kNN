@@ -1,0 +1,179 @@
+---
+title: "penguins-knn-mlr.Rmd"
+author: "James Page"
+date: "30/07/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This notebook shows how to uild a kNN classifier that we can use to predict diabetes status from measurements of future patients. It is based on chapter 3 of [_Machine Learning with R, the tidyverse, and mlr_](https://www.manning.com/books/machine-learning-with-r-the-tidyverse-and-mlr) by Hefin Rhys (2020). 
+
+This notebook shows how to use a kNN classifier to predict the sex of penguins using the ``palmerpenguins` data set - this is a set of observations of Antarctic penguins who live on the Palmer Archipelago. It is based on chapter 3 of [_Machine Learning with R, the tidyverse, and mlr_](https://www.manning.com/books/machine-learning-with-r-the-tidyverse-and-mlr) by Hefin Rhys (2020), and this article from Julia Silge on using the tidymodels: [Getting started with tidymodels and #TidyTuesday Palmer Penguins])(https://www.r-bloggers.com/getting-started-with-tidymodels-and-tidytuesday-palmer-penguins/)
+
+First of all, lets have a look at the dataset:
+
+```{r}
+library(mlr)
+library(tidyverse)
+library(palmerpenguins)
+
+penguinsTib <- as_tibble(penguins)
+glimpse(penguinsTib)
+summary(penguinsTib)
+```
+
+```{r}
+ggplot(penguinsTib, 
+       aes(bill_length_mm, flipper_length_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+
+ggplot(penguinsTib, 
+       aes(bill_depth_mm, flipper_length_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+
+ggplot(penguinsTib, 
+       aes(body_mass_g, flipper_length_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+
+ggplot(penguinsTib, 
+       aes(body_mass_g, bill_length_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+
+ggplot(penguinsTib, 
+       aes(body_mass_g, bill_depth_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+```
+
+We'll create a new classifier task with the `makeClassifTask` function that we will use to predict the sex of a penguin based on bill_length_mm, flipper_length_mm and body_mass_g variables. In this example, sex is the target class, and bill_length_mm, flipper_length_mm and body_mass_g are the predictor classes.
+
+```{r createTask}
+# first we'll drop the colums we don't need - bill_depth_mm doesn't seem like it
+# will be useful for us for instance
+
+penguinsTib <- penguinsTib %>%
+  filter(!is.na(bill_length_mm), !is.na(flipper_length_mm), !is.na(body_mass_g)) %>%
+  select(species, bill_length_mm, flipper_length_mm, body_mass_g)
+
+penguinsTask <- makeClassifTask(data = penguinsTib, target = "species")
+```
+
+Now we'll train a K-nearest neighbour classifier using the hyperparameter $k = 2$:
+
+```{r createLearner}
+knnLearner <- makeLearner("classif.knn", par.vals = list("k" = 2))
+knnModel <- train(knnLearner, penguinsTask)
+```
+
+Let's use this model to make some predictions:
+
+```{r}
+knnPred <- predict(knnModel, newdata = penguinsTib)
+
+performance(knnPred, measures = list(mmce, acc))
+```
+
+```{r}
+penguinsTib
+```
+
+
+```{r}
+newPenguins <- tibble(
+  bill_length_mm = c(41.2, 44.9, 51.6, 50.2, 46.3),
+  flipper_length_mm = c(192, 212, 203, 181, 200),
+  body_mass_g = c(2990, 5310, 3475, 4470, 4560))
+
+newPenguinsPred <- predict(knnModel, newdata = newPenguins)
+newPenguins$species <- getPredictionResponse(newPenguinsPred)
+
+newPenguins
+```
+
+```{r}
+ggplot(newPenguins, 
+       aes(bill_length_mm, flipper_length_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+
+ggplot(newPenguins, 
+       aes(bill_length_mm, body_mass_g, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+
+ggplot(newPenguins, 
+       aes(body_mass_g, flipper_length_mm, shape = species, color = species)) +
+  geom_point() + 
+  theme_bw()
+```
+
+## Cross-Validation
+
+Now lets run some cross-validation to test the value of our model. You'll recall that cross-validation is a way of evaluate the performance of your model on data it hasn’t seen yet by repeatedly sifting the data that is used for the training and test sets.
+
+```{r include=FALSE}
+kFold <- makeResampleDesc(method = "RepCV", 
+                          folds = 10, reps = 50, 
+                          stratify = TRUE)
+kFoldCV <- resample(learner = knnLearner, task = penguinsTask, 
+                    resampling = kFold, measures = list(mmce, acc))
+```
+
+```{r}
+print(kFoldCV$aggr)
+```
+
+Lets look at the confusion matrix for one of the resamplings, and see how this compares with the one we generated previously:
+
+```{r}
+calculateConfusionMatrix(kFoldCV$pred, relative = TRUE)
+```
+
+## Tuning _k_
+
+In this section we define a range of values for _k_ which can then be run as a parameter sweep. We'll use a grid search to try every single value in the parameter space.
+
+```{r}
+knnParamSpace <- makeParamSet(makeDiscreteParam("k", values = 1:10))
+gridSearch <- makeTuneControlGrid()
+```
+
+We call the `tuneParams()` function to perform the tuning. We'll reuse the k-fold resampling we used previously.
+
+```{r}
+tunedK <- tuneParams("classif.knn", task = penguinsTask,
+                     resampling = kFold,
+                     par.set = knnParamSpace, control = gridSearch)
+```
+
+```{r}
+knnTuningData <- generateHyperParsEffectData(tunedK)
+plotHyperParsEffect(knnTuningData, 
+                    x = "k", y = "mmce.test.mean",
+                    plot.type = "line")
+```
+dy to train our final model, using a $k=`r tunedK$x`$ (rather than the $k=2$ we chose originally):
+
+```{r}
+tunedKnn <- setHyperPars(makeLearner("classif.knn"), par.vals = tunedK$x)
+tunedKnnModel <- train(tunedKnn, penguinsTask)
+```
+
+Once we have our final model we can see how it will classify new patients. For example, say we have a set of new patients:
+
+```{r}
+newPenguins %>%
+  mutate(species=NULL)
+
+newPenguinsPred <- predict(tunedKnnModel, newdata = newPenguins)
+newPenguins$species <- getPredictionResponse(newPenguinsPred)
+
+newPenguins
+```

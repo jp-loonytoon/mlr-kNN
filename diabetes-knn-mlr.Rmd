@@ -27,6 +27,7 @@ library(tidyverse)
 data(diabetes, package = "mclust")
 diabetesTib <- as_tibble(diabetes)
 
+glimpse(diabetesTib)
 summary(diabetesTib)
 ```
 
