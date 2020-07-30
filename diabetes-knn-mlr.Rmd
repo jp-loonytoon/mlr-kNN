@@ -163,17 +163,15 @@ Once we have our final model we can see how it will classify new patients. For e
 newDiabetesPatients <- tibble(glucose = c(82, 108, 300),
                               insulin = c(361, 288, 1052),
                               sspg = c(200, 186, 135))
-
-newDiabetesPatients
 ```
 
 Let's pass this data set into our model to get their predicted diabetes status:
 
 ```{r}
 newPatientsPred <- predict(tunedKnnModel, newdata = newDiabetesPatients)
-print(newPatientsPred)
+newDiabetesPatients$response <- getPredictionResponse(newPatientsPred)
 
-getPredictionResponse(newPatientsPred)
+newDiabetesPatients
 ```
 
 ```{r}
