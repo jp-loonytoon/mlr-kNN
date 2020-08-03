@@ -3,19 +3,17 @@ title: "penguins-knn-mlr.Rmd"
 author: "James Page"
 date: "30/07/2020"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This notebook shows how to uild a kNN classifier that we can use to predict diabetes status from measurements of future patients. It is based on chapter 3 of [_Machine Learning with R, the tidyverse, and mlr_](https://www.manning.com/books/machine-learning-with-r-the-tidyverse-and-mlr) by Hefin Rhys (2020). 
+This notebook shows how to build a kNN classifier that we can use to classify penguin species. This notebook shows how to use a kNN classifier to predict the sex of penguins using the ``palmerpenguins` data set - this is a set of observations of Antarctic penguins who live on the Palmer Archipelago. It is based on chapter 3 of [_Machine Learning with R, the tidyverse, and mlr_](https://www.manning.com/books/machine-learning-with-r-the-tidyverse-and-mlr) by Hefin Rhys (2020), and this article from Julia Silge on using the tidymodels: [Getting started with tidymodels and #TidyTuesday Palmer Penguins])(https://www.r-bloggers.com/getting-started-with-tidymodels-and-tidytuesday-palmer-penguins/)
 
-This notebook shows how to use a kNN classifier to predict the sex of penguins using the ``palmerpenguins` data set - this is a set of observations of Antarctic penguins who live on the Palmer Archipelago. It is based on chapter 3 of [_Machine Learning with R, the tidyverse, and mlr_](https://www.manning.com/books/machine-learning-with-r-the-tidyverse-and-mlr) by Hefin Rhys (2020), and this article from Julia Silge on using the tidymodels: [Getting started with tidymodels and #TidyTuesday Palmer Penguins])(https://www.r-bloggers.com/getting-started-with-tidymodels-and-tidytuesday-palmer-penguins/)
-
-First of all, lets have a look at the dataset:
+First of all, lets have a look at the penguins dataset and produce some visualisations to understand the data better:
 
 ```{r}
 library(mlr)
@@ -30,31 +28,26 @@ summary(penguinsTib)
 ```{r}
 ggplot(penguinsTib, 
        aes(bill_length_mm, flipper_length_mm, shape = species, color = species)) +
-  geom_point() + 
-  theme_bw()
+  geom_point() + theme_minimal()
 
 ggplot(penguinsTib, 
        aes(bill_depth_mm, flipper_length_mm, shape = species, color = species)) +
-  geom_point() + 
-  theme_bw()
+  geom_point() + theme_minimal()
 
 ggplot(penguinsTib, 
        aes(body_mass_g, flipper_length_mm, shape = species, color = species)) +
-  geom_point() + 
-  theme_bw()
+  geom_point() + theme_minimal()
 
 ggplot(penguinsTib, 
        aes(body_mass_g, bill_length_mm, shape = species, color = species)) +
-  geom_point() + 
-  theme_bw()
+  geom_point() + theme_minimal()
 
 ggplot(penguinsTib, 
        aes(body_mass_g, bill_depth_mm, shape = species, color = species)) +
-  geom_point() + 
-  theme_bw()
+  geom_point() + theme_minimal()
 ```
 
-We'll create a new classifier task with the `makeClassifTask` function that we will use to predict the sex of a penguin based on bill_length_mm, flipper_length_mm and body_mass_g variables. In this example, sex is the target class, and bill_length_mm, flipper_length_mm and body_mass_g are the predictor classes.
+We'll create a new classifier task with the `makeClassifTask` function that we will use to predict penguin species based on the `bill_length_mm`, `flipper_length_mm` and `body_mass_g` variables. In this example, `species` is the target class, and `bill_length_mm`, `flipper_length_mm` and `body_mass_g` are the predictor classes.
 
 ```{r createTask}
 # first we'll drop the colums we don't need - bill_depth_mm doesn't seem like it
@@ -82,12 +75,9 @@ knnPred <- predict(knnModel, newdata = penguinsTib)
 performance(knnPred, measures = list(mmce, acc))
 ```
 
-```{r}
-penguinsTib
-```
+We'll invent some new penguin data and see how good the model is at predicting species:
 
-
-```{r}
+```{r Untuned Results}
 newPenguins <- tibble(
   bill_length_mm = c(41.2, 44.9, 51.6, 50.2, 46.3),
   flipper_length_mm = c(192, 212, 203, 181, 200),
@@ -149,11 +139,15 @@ gridSearch <- makeTuneControlGrid()
 
 We call the `tuneParams()` function to perform the tuning. We'll reuse the k-fold resampling we used previously.
 
-```{r}
+```{r Tune Paramaters}
 tunedK <- tuneParams("classif.knn", task = penguinsTask,
                      resampling = kFold,
                      par.set = knnParamSpace, control = gridSearch)
+
+print(tunedK$x)
 ```
+
+From this we can see that the optimum value is $k=`r tunedK$x`$ (rather than the $k=2$ we chose originally):
 
 ```{r}
 knnTuningData <- generateHyperParsEffectData(tunedK)
@@ -161,7 +155,7 @@ plotHyperParsEffect(knnTuningData,
                     x = "k", y = "mmce.test.mean",
                     plot.type = "line")
 ```
-dy to train our final model, using a $k=`r tunedK$x`$ (rather than the $k=2$ we chose originally):
+Then let retrain using this new hyperparameter $k$:
 
 ```{r}
 tunedKnn <- setHyperPars(makeLearner("classif.knn"), par.vals = tunedK$x)
@@ -170,7 +164,7 @@ tunedKnnModel <- train(tunedKnn, penguinsTask)
 
 Once we have our final model we can see how it will classify new patients. For example, say we have a set of new patients:
 
-```{r}
+```{r Tuned Results}
 newPenguins %>%
   mutate(species=NULL)
 

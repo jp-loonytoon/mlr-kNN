@@ -31,7 +31,6 @@ glimpse(diabetesTib)
 summary(diabetesTib)
 ```
 
-
 ```{r}
 ggplot(diabetesTib, 
        aes(glucose, insulin, shape = class, color = class)) +
@@ -58,10 +57,8 @@ Create a new task with the `makeClassifTask` function:
 ```{r createTask}
 diabetesTask <- makeClassifTask(data = diabetesTib, 
                                 target = "class")
-```
 
-```{r}
-diabetesTask
+(diabetesTask)
 ```
 
 We're going to train a K-nearest neighbour classifier, so we setup a learner to do this, setting the value of `k` (which is termed a 'hyperparameter') to 2:
